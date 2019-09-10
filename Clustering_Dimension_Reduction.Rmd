@@ -273,7 +273,9 @@ data(iris)
 
 0. Subset the Iris dataset to only include `Sepal.Length`, `Sepal.Width`, `Petal.Length`, and `Petal.Width`. 
 ```{r}
-#Subset iris to only include the variables listed above:
+# Subset iris to only include the variables listed above:
+# Below I instead just reference iris[,1:4] when needed in order not to lose
+# the species information in the table
 iris_sub <- select(iris, "Sepal.Length", "Sepal.Width", "Petal.Length", "Petal.Width")
 ```
 
@@ -282,22 +284,19 @@ iris_sub <- select(iris, "Sepal.Length", "Sepal.Width", "Petal.Length", "Petal.W
 The first step in the k-means algorithm is to randomly assign each data point a number between 1 and K. For the example below, we will use k = 3. 
 
 ```{r}
-# Compute PCA manually
+# Subset iris measurements
 # Normalize iris values
-iris_centered <- apply(iris_sub, 2, function(x) (x - mean(x)) / sd(x))
-
+#Compute PCA
+iris_centered <- apply(iris[,1:4], 2, function(x) (x - mean(x)) / sd(x))
 
 # dis tance matrix
 iris_dist <- as.matrix(dist(iris_centered, method = "euclidean"))
-
-
-
 
 # Set the value of k 
 k <- 3
 
 # Assign each observation a value
-#iris$group <- sample(k, nrow(iris), replace=T)
+iris$group <- sample(k, nrow(iris), replace=T)
 
 ```
 
@@ -311,7 +310,7 @@ k <- 3
 ```{r}
 # Compute PCA manually
 # Normalize iris values
-iris_centered <- apply(iris_sub, 
+iris_centered <- apply(iris[,1:4], 
                        2, 
                        function(x) (x - mean(x)) / sd(x)
                        )
@@ -370,7 +369,15 @@ heatmap(iris_ica$S)
   * Using this clustering, color the PCA plot according to the clusters.
   
 ```{r message+FALSE}
+# load cluster package for kmeans() function
 library(cluster)
+
+# Reset iris_centered variable
+rm(iris_centered)
+iris_centered <- as.data.frame(apply(iris[,1:4],
+                       2, 
+                       function(x) (x - mean(x)) / sd(x)
+                       ))
 
 # Create a list of the number of clusters to test silhouette analysis on
 # Create an empty vector to store mean silhouette widths
@@ -390,7 +397,7 @@ for (k in nclusters){
                )
         )
   sil_width_list <- c(sil_width_list, mean_sil_width)
-}
+  }
 
 # Plot results of silhouette analysis
 plot(nclusters, sil_width_list, 
@@ -399,16 +406,28 @@ plot(nclusters, sil_width_list,
      ylab = "Mean Silhouette Width")
 title("Mean Silhouette Width vs. Number of Clusters in Normalized Iris Data")
 
-
+# Perform k-means clustering
 iris_cluster <- kmeans(iris_centered, 2)
 
+# Perform PCA on normalized iris data
+iris_PC <- prcomp(data.matrix(iris_centered[,1:4]), 
+                 center = TRUE, 
+                 scale = TRUE)
 
-# 
-# plot(iris_cluster[["cluster"]], iris_dist, 
-#      color = "Species")
+# Plot k-means clustering, color by cluster
+ggplot(iris_PC,
+       aes(x = PC1, y = PC2,
+           color = iris_cluster$cluster)) +
+  geom_point() +
+  scale_color_gradientn(colors = default_colors) +
+  labs(title = "K-Means Clustering of Iris Measurement Data",
+       subtitle = "k = 2",
+       color = "Cluster")
+
 
 ```
  
+ Using the mean silhouette width as our metric, we can see that the optimal number of clusters to choose is 2. This clustering obviously cannot correctly separate all three species present in the dataset, but it does correctly separate out the measurements of the setosa species from versicolor and virginica.
   
   
   
@@ -421,25 +440,23 @@ iris_cluster <- kmeans(iris_centered, 2)
 
 ```{r}
 
+# Reset iris_centered variable
 rm(iris_centered)
 iris_centered <- as.data.frame(apply(iris[,1:4],
                        2, 
                        function(x) (x - mean(x)) / sd(x)
                        ))
 
-# re-add species labels
-#iris_centered <- cbind(iris_centered, iris[,5])
-
 # Compute one hierarchical clustering with centroid linkage
 tree1 <- hclust(dist(iris_centered), 
                    method = "centroid")
 
-# Compute one hierarchical clustering with complete linkage
+# Compute one hierarchical clustering with single linkage
 tree2 <- hclust(dist(iris_centered), 
                    method = "single")
 
-# Cut tree 1 and tree 2 into two clusters
-# Cut tree 2 into three clusters
+# Cut tree 1 and tree 2 into three clusters
+# Also cut tree 2 into four clusters
 cluster1 <- cutree(tree1, 3)
 cluster2a <- cutree(tree2, 3)
 cluster2b <- cutree(tree2, 4)
@@ -457,35 +474,53 @@ iris_PC <- prcomp(data.matrix(iris_centered[,1:4]),
                  center = TRUE, 
                  scale = TRUE)
 
+# Create a vector of colors to use in ggplots
+# To try to maintain color consistency
 default_colors = c("#619CFF","#00BA38", "#F8766D" )
 
 # Plot species as a reference
 ggplot(iris_PC, 
        aes(x = PC1, y = PC2, color = iris_centered$Species)) + 
-  geom_point()
+  geom_point() +
+  #scale_color_gradientn(colors = default_colors) +
+  labs(title = "Principal Component Analysis of Measurements on 3 Species of Iris",
+       color = "Species")
 
-
+# Plot centroid linkage, k = 3
 ggplot(iris_PC, 
        aes(x = PC1, y = PC2, 
            color = iris_centered$cluster1)) + 
-  geom_point() + 
-  scale_color_gradientn(colors = default_colors)
-
+  geom_point() +
+  scale_color_gradientn(colors = default_colors) +
+  labs(title = "Hierarchical Clustering of Iris Measurement Data",
+       subtitle = "Centroid Linkage, k = 3", 
+       color = "Cluster")
+# Plot single linkage, k = 3
 ggplot(iris_PC,
        aes(x = PC1, y = PC2,
            color = iris_centered$cluster2a)) +
   geom_point() + 
-  scale_color_gradientn(colors = default_colors)
-
+  scale_color_gradientn(colors = default_colors) +
+  labs(title = "Hierarchical Clustering of Iris Measurement Data",
+       subtitle = "Single Linkage, k = 3", 
+       color = "Cluster")
+# Plot single linkage, k = 4
 ggplot(iris_PC, 
        aes(x = PC1, y = PC2, 
            color = iris_centered$cluster2b)) +
   geom_point() +
-  scale_color_gradientn(colors = default_colors)
-
+  scale_color_gradientn(colors = default_colors) +
+    labs(title = "Hierarchical Clustering of Iris Measurement Data",
+       subtitle = "Single Linkage, k = 4", 
+       color = "Cluster")
 
 ```
 
+I chose to investigate the algorithm's performance in identifying 3 clusters because the data comes from measurements of 3 different species. Both hierarchical clustering linkage rules - here, centroid and single- fail to correctly group an outlier member of the setosa species with the other species members. Instead, the use of these linkage rules along with a k-value of 3 lead to placing the setosa outlier in its own group.
+
+Expanding the number of clusters from k=3 to k=4 using single linkage, the outlier setosa data point remains in its own cluster. Three members of the virginica species are identified as members of a different cluster. However, the majority of versicolor and virginica members remain grouped together.
+
+*Note: I tried to maintain color consistency across each of the plots, but I kept running into errors regarding continuous / discrete values. When I tried forcing the cluster assignment value to be an integer using the as.integer() function my plots broke. Not sure how to resolve this, but I am aware that without context the changes in plot color scheme may be confusing.
 
 
 # Optional material
