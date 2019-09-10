@@ -26,7 +26,7 @@ library(fastICA)
 
 ```{r}
 # read in Auto data
-Auto_data <- read_csv("/Users/ay1392/Desktop/Auto.csv")
+Auto_data <- read_csv("Auto.csv")
 
 #remove cars with unknown horsepower and set horsepower to numeric
 Auto_data <- Auto_data %>% 
@@ -236,7 +236,7 @@ plot(X[,2], type="l")
 ```
 
 Unmix using fastICA
-```{r, include=FALSE}
+```{r}
 a <- fastICA(X, 2, alg.typ = "parallel", fun = "logcosh", alpha = 1,
              method = "R", row.norm = FALSE, maxit = 200,
              tol = 0.0001, verbose = TRUE)
@@ -251,7 +251,7 @@ plot(1:500, a$S[,2], type = "l", xlab = "S'2", ylab = "")
 
 
 ### ICA on the auto data
-```{r, include=FALSE}
+```{r}
 a <- fastICA(Auto_data_clust, 7, alg.typ = "parallel", fun = "logcosh", alpha = 1,
              method = "R", row.norm = FALSE, maxit = 200,
              tol = 0.0001, verbose = TRUE)
@@ -272,16 +272,145 @@ data(iris)
 ```
 
 0. Subset the Iris dataset to only include `Sepal.Length`, `Sepal.Width`, `Petal.Length`, and `Petal.Width`. 
+```{r}
+#Subset iris to only include the variables listed above:
+iris_sub <- select(iris, "Sepal.Length", "Sepal.Width", "Petal.Length", "Petal.Width")
+```
 
 1. Write out the Kmeans algorithm by hand, and run two iterations of it. 
 
+The first step in the k-means algorithm is to randomly assign each data point a number between 1 and K. For the example below, we will use k = 3. 
+
+```{r}
+# Compute PCA manually
+# Normalize iris values
+iris_centered <- apply(iris_sub, 2, function(x) (x - mean(x)) / sd(x))
+
+
+# dis tance matrix
+iris_dist <- as.matrix(dist(iris_centered, method = "euclidean"))
+
+
+
+
+# Set the value of k 
+k <- 3
+
+# Assign each observation a value
+#iris$group <- sample(k, nrow(iris), replace=T)
+
+```
+
+
+
+
+
 2. Run PCA on the Iris dataset. Plot a scatter plot of PC1 vs PC2 and include the percent variance those PCs describe. 
+
+
+```{r}
+# Compute PCA manually
+# Normalize iris values
+iris_centered <- apply(iris_sub, 
+                       2, 
+                       function(x) (x - mean(x)) / sd(x)
+                       )
+# Calculate covariance matrix
+iris_cov <- cov(iris_centered)
+# Calculate eigenvalues and eigenvectors
+iris_eigenval <- eigen(iris_cov)$value
+iris_eigenvec <- eigen(iris_cov)$vector
+
+# Multiply original data by eigenvectors
+PC <- as.data.frame(data.matrix(iris_centered) %*% iris_eigenvec)
+
+# Find the percentage of variance explained by each principal component
+# by computing culmulative eigenvalue
+perc_var_explain <- round(cumsum(iris_eigenval)/sum(iris_eigenval) * 100, digits = 2)
+
+# Plot principal components
+ggplot(PC, aes(PC[,1], PC[,2])) + geom_point(aes(PC[,1], PC[,2]))
+
+# Print a string explaining how much variance each PC explains (cumulative)
+result_string = paste0("Principal components 1 and 2 cumulatively explain ", perc_var_explain[1], "% and ", perc_var_explain[2], "% of the variance of the data respectively.")
+print(result_string)
+
+# Same PCA plot using R's built-in functionality
+# Normalize iris subset with center= and scale= arguments 
+# to check agreement with above procedure
+
+autoplot(prcomp(data.matrix(iris_sub), 
+                center = TRUE, 
+                scale = TRUE))
+
+```
+
+
+
+
+
 
 3. Run ICA on the Iris dataset. Plot the independent components as a heatmap.
 
+```{r message = FALSE}
+
+iris_ica <- fastICA(iris_sub, 4, alg.typ = "parallel", fun = "logcosh", alpha = 1,
+             method = "R", row.norm = FALSE, maxit = 200,
+             tol = 0.0001, verbose = TRUE)
+
+heatmap(iris_ica$S)
+```
+
+
+
 4. Use Kmeans to cluster the Iris data. 
-  * Use the silhouette function in the cluster package to find the optimal number of clusters for kmeans for the iris dataset. Then cluster using kmeans clustering. Does the data cluster by species? 
+ 
+* Use the silhouette function in the cluster package to find the optimal number of clusters for kmeans for the iris dataset. Then cluster using kmeans clustering. Does the data cluster by species? 
+  
   * Using this clustering, color the PCA plot according to the clusters.
+  
+```{r message+FALSE}
+library(cluster)
+
+# Create a list of the number of clusters to test silhouette analysis on
+# Create an empty vector to store mean silhouette widths
+nclusters = c(2:10)
+sil_width_list <- c()
+
+# Iterate silhouette analysis over number of clusters
+# Print results and store mean silhouette widths
+for (k in nclusters){
+  a <- kmeans(iris_centered, k)
+  b <- silhouette(a[["cluster"]], iris_dist)
+  mean_sil_width = round(mean(b[,3]), 3)
+  print(paste0("The average silhouette width with ", 
+               k, 
+               " clusters is ", 
+               mean_sil_width
+               )
+        )
+  sil_width_list <- c(sil_width_list, mean_sil_width)
+}
+
+# Plot results of silhouette analysis
+plot(nclusters, sil_width_list, 
+     type = "b", 
+     xlab = "Number of Clusters (k)",
+     ylab = "Mean Silhouette Width")
+title("Mean Silhouette Width vs. Number of Clusters in Normalized Iris Data")
+
+
+iris_cluster <- kmeans(iris_centered, 2)
+
+
+# 
+# plot(iris_cluster[["cluster"]], iris_dist, 
+#      color = "Species")
+
+```
+ 
+  
+  
   
 5. Use hierarchical clustering to cluster the Iris data.
 
@@ -289,6 +418,75 @@ data(iris)
   * For one linkage type and one distance metric, try two different cut points. 
   * Using this clustering, color the PCA plot according to the clusters. (6  plots in total)
   
+
+```{r}
+
+rm(iris_centered)
+iris_centered <- as.data.frame(apply(iris[,1:4],
+                       2, 
+                       function(x) (x - mean(x)) / sd(x)
+                       ))
+
+# re-add species labels
+#iris_centered <- cbind(iris_centered, iris[,5])
+
+# Compute one hierarchical clustering with centroid linkage
+tree1 <- hclust(dist(iris_centered), 
+                   method = "centroid")
+
+# Compute one hierarchical clustering with complete linkage
+tree2 <- hclust(dist(iris_centered), 
+                   method = "single")
+
+# Cut tree 1 and tree 2 into two clusters
+# Cut tree 2 into three clusters
+cluster1 <- cutree(tree1, 3)
+cluster2a <- cutree(tree2, 3)
+cluster2b <- cutree(tree2, 4)
+
+# Bind cluster assignments to dataframe, add species back in
+iris_centered <- cbind(iris_centered, 
+                       cluster1, 
+                       cluster2a, 
+                       cluster2b, 
+                       iris[,5])
+colnames(iris_centered)[ncol(iris_centered)] <- "Species"
+
+# Perform PCA on normalized iris data
+iris_PC <- prcomp(data.matrix(iris_centered[,1:4]), 
+                 center = TRUE, 
+                 scale = TRUE)
+
+default_colors = c("#619CFF","#00BA38", "#F8766D" )
+
+# Plot species as a reference
+ggplot(iris_PC, 
+       aes(x = PC1, y = PC2, color = iris_centered$Species)) + 
+  geom_point()
+
+
+ggplot(iris_PC, 
+       aes(x = PC1, y = PC2, 
+           color = iris_centered$cluster1)) + 
+  geom_point() + 
+  scale_color_gradientn(colors = default_colors)
+
+ggplot(iris_PC,
+       aes(x = PC1, y = PC2,
+           color = iris_centered$cluster2a)) +
+  geom_point() + 
+  scale_color_gradientn(colors = default_colors)
+
+ggplot(iris_PC, 
+       aes(x = PC1, y = PC2, 
+           color = iris_centered$cluster2b)) +
+  geom_point() +
+  scale_color_gradientn(colors = default_colors)
+
+
+```
+
+
 
 # Optional material
 On PCA:
