@@ -281,7 +281,12 @@ iris_sub <- select(iris, "Sepal.Length", "Sepal.Width", "Petal.Length", "Petal.W
 
 1. Write out the Kmeans algorithm by hand, and run two iterations of it. 
 
-The first step in the k-means algorithm is to randomly assign each data point a number between 1 and K. For the example below, we will use k = 3. 
+Algorithm summary:
+The first step in the k-means algorithm is to randomly assign each data point a number between 1 and k. We then calculate the k centroids of each group - ie the mean position of each point. We then assign each data point a new value between 1 and k according to which of our centroids is closest. We recalculate the location of hte centroids, and then do another round of cluster assigment by closest centroid. We repeat this process until no data point changes its assigned group between iterations.
+
+*What I don't understand about this is how to choose the positions of the data points. If we want to have a two-dimensional plot, do we have to perform PCA first? Do we just use all four measurements?*
+
+
 
 ```{r}
 # Subset iris measurements
@@ -297,6 +302,7 @@ k <- 3
 
 # Assign each observation a value
 iris$group <- sample(k, nrow(iris), replace=T)
+
 
 ```
 
@@ -419,7 +425,6 @@ ggplot(iris_PC,
        aes(x = PC1, y = PC2,
            color = iris_cluster$cluster)) +
   geom_point() +
-  scale_color_gradientn(colors = default_colors) +
   labs(title = "K-Means Clustering of Iris Measurement Data",
        subtitle = "k = 2",
        color = "Cluster")
@@ -520,7 +525,7 @@ I chose to investigate the algorithm's performance in identifying 3 clusters bec
 
 Expanding the number of clusters from k=3 to k=4 using single linkage, the outlier setosa data point remains in its own cluster. Three members of the virginica species are identified as members of a different cluster. However, the majority of versicolor and virginica members remain grouped together.
 
-*Note: I tried to maintain color consistency across each of the plots, but I kept running into errors regarding continuous / discrete values. When I tried forcing the cluster assignment value to be an integer using the as.integer() function my plots broke. Not sure how to resolve this, but I am aware that without context the changes in plot color scheme may be confusing.
+*Note: I tried to maintain color consistency across each of the plots, but I kept running into errors regarding continuous / discrete values. When I tried forcing the cluster assignment value to be an integer using the as.integer() function my plots broke. Not sure how to resolve this, but I am aware that without context the changes in plot color scheme may be confusing.*
 
 
 # Optional material
