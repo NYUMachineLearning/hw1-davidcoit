@@ -285,11 +285,15 @@ The first step in the k-means algorithm is to randomly assign each data point a 
 
 
 
-
-```{r}
+```{r message = FALSE}
 # import library flexclust
 # to easily compute distances between values in two matrices
 library(flexclust)
+```
+
+
+```{r}
+
 
 # Set the value of k 
 k <- 3
@@ -307,7 +311,8 @@ for(i in 1:2){
   centroid_dist <- dist2(iris[1:4], centroids[2:5], method="euc")*2
   # Reassign clusters per closest cluster centroid
   iris$cluster <- apply(centroid_dist, 1, which.min)
-  print(iris)
+  # Printing count of cluster members to show algorithm progression
+  print(table(iris$cluster))
 }
   
   
@@ -368,6 +373,8 @@ autoplot(prcomp(data.matrix(iris_centered),
 
 ```{r message = FALSE}
 
+
+
 # Plot 3 independent components of iris dataset
 iris_ica <- fastICA(iris[,1:4], 3, alg.typ = "parallel", fun = "logcosh", alpha = 1,
              method = "R", row.norm = FALSE, maxit = 200,
@@ -396,6 +403,8 @@ iris_centered <- as.data.frame(apply(iris[,1:4],
                        2, 
                        function(x) (x - mean(x)) / sd(x)
                        ))
+# Calculate distance matrix
+iris_dist <- as.matrix(dist(iris_centered, method = "euclidean"))
 
 # Create a list of the number of clusters to test silhouette analysis on
 # Create an empty vector to store mean silhouette widths
