@@ -202,7 +202,7 @@ ggplot(iris_PC,
  
 **Using the mean silhouette width as our metric, we can see that the optimal number of clusters to choose is 2. Because there are more species than there are clusters, this clustering cannot correctly separate all species present in the dataset, but it does correctly separate out the measurements of the setosa species from versicolor and virginica.**
  
-**If we expand the number of clusters to three we still do not correctly separate versicolor and virginica:**
+**If we increase the number of clusters to three we still do not correctly separate versicolor and virginica:**
 
 ```{r}
 
