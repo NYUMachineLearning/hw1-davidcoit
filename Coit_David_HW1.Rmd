@@ -1,0 +1,366 @@
+---
+title: "Unsupervised learning - clustering and dimension reduction"
+author: "David Coit"
+date: "Fall 2019"
+output:
+  html_document:
+    df_print: paged
+fontsize: 11pt
+---
+```{r load, include=FALSE}
+library(ggplot2)
+library(tidyverse)
+library(ggfortify)
+library(fastICA)
+```
+
+## Homework
+
+```{r}
+data(iris)
+```
+
+0. Subset the Iris dataset to only include `Sepal.Length`, `Sepal.Width`, `Petal.Length`, and `Petal.Width`. 
+```{r}
+# Subset iris to only include the variables listed above:
+iris <- select(iris, "Sepal.Length", "Sepal.Width", "Petal.Length", "Petal.Width")
+```
+
+1. Write out the Kmeans algorithm by hand, and run two iterations of it. 
+
+**Algorithm summary:**
+**The first step in the k-means algorithm is to randomly assign each data point a number between 1 and k. We then calculate the k centroids of each group - ie the mean position of each point. Finally, we re-assign each data point a new value between 1 and k according to which cluster centroid is closest. We repeat the cluster centroid calculation and data point cluster reassignment until no data point changes cluster.** 
+\  
+**Below, two iterations of the "hand written" k-means algorithm are run using k = 3. A table summarizing the number of datapoints in each cluster is displayed for each iteration, showing that the algorithm is working to reassign data points as it runs**
+
+
+
+```{r message = FALSE}
+# import library flexclust
+# to easily compute distances between values in two matrices
+library(flexclust)
+```
+
+
+```{r}
+# Set the value of k 
+k <- 3
+
+# Set number of iterations to run
+iterations <- 2
+
+# Initialize cluster assignment, assign each observation a random value 1:k
+iris$cluster <- sample(k, nrow(iris), replace=T)
+
+# Run two iterations of k-means algorithm
+for(i in 1:iterations){
+  # Calculate centroid coordinates per cluster
+  centroids <- aggregate(. ~ cluster,
+                        iris,
+                        mean)
+  # Calculate squared Euclidean distance between iris points and each cluster centroid
+  centroid_dist <- dist2(iris[1:4], centroids[2:5], method="euc")*2
+  # Reassign clusters per closest cluster centroid
+  iris$cluster <- apply(centroid_dist, 1, which.min)
+  # Printing count of cluster members to show algorithm progression
+  print(table(iris$cluster))
+}
+  
+```
+
+
+
+
+2. Run PCA on the Iris dataset. Plot a scatter plot of PC1 vs PC2 and include the percent variance those PCs describe. 
+
+
+```{r}
+# Reset iris data
+data(iris)
+
+# Compute PCA manually
+# Normalize iris values
+iris_centered <- apply(iris[,1:4], 
+                       2, 
+                       function(x) (x - mean(x)) / sd(x)
+                       )
+# Calculate covariance matrix
+iris_cov <- cov(iris_centered)
+# Calculate eigenvalues and eigenvectors
+iris_eigenval <- eigen(iris_cov)$value
+iris_eigenvec <- eigen(iris_cov)$vector
+
+# Multiply original data by eigenvectors
+PC <- as.data.frame(data.matrix(iris_centered) %*% iris_eigenvec)
+
+# Find the percentage of variance explained by each principal component
+# by computing culmulative eigenvalue
+perc_var_explain <- round(cumsum(iris_eigenval)/sum(iris_eigenval) * 100, digits = 2)
+
+# Plot principal components
+ggplot(PC, aes(PC[,1], PC[,2])) + geom_point(aes(PC[,1], PC[,2]))
+
+# Print a string explaining how much variance each PC explains (cumulative)
+result_string = paste0("Principal components 1 and 2 cumulatively explain ", 
+                       perc_var_explain[1], 
+                       "% and ", 
+                       perc_var_explain[2], 
+                       "% of the variance of the data respectively.")
+print(result_string)
+
+# Same PCA plot using R's built-in functionality
+# Normalize iris subset with center= and scale= arguments 
+# to check agreement with above procedure
+autoplot(prcomp(data.matrix(iris_centered), 
+                center = TRUE, 
+                scale = TRUE))
+
+```
+
+
+
+3. Run ICA on the Iris dataset. Plot the independent components as a heatmap.
+
+```{r message = FALSE}
+# Plot 3 independent components of iris dataset
+iris_ica <- fastICA(iris[,1:4], 3, alg.typ = "parallel", fun = "logcosh", alpha = 1,
+             method = "R", row.norm = FALSE, maxit = 200,
+             tol = 0.0001, verbose = TRUE)
+
+heatmap(iris_ica$S)
+```
+
+**I chose to plot 3 independent components because there were measurements from 3 species of iris.**
+
+
+
+4. Use Kmeans to cluster the Iris data. 
+ 
+* Use the silhouette function in the cluster package to find the optimal number of clusters for kmeans for the iris dataset. Then cluster using kmeans clustering. Does the data cluster by species? 
+  
+  * Using this clustering, color the PCA plot according to the clusters.
+  
+```{r message+FALSE}
+# load cluster package for kmeans() function
+library(cluster)
+
+# Reset iris_centered variable
+rm(iris_centered)
+iris_centered <- as.data.frame(apply(iris[,1:4],
+                       2, 
+                       function(x) (x - mean(x)) / sd(x)
+                       ))
+# Calculate distance matrix
+iris_dist <- as.matrix(dist(iris_centered, method = "euclidean"))
+
+# Create a list of the number of clusters to test silhouette analysis on
+# Create an empty vector to store mean silhouette widths
+nclusters = c(2:10)
+sil_width_list <- c()
+
+# Iterate silhouette analysis over number of clusters
+# Print results and store mean silhouette widths
+for (k in nclusters){
+  a <- kmeans(iris_centered, k)
+  b <- silhouette(a[["cluster"]], iris_dist)
+  mean_sil_width = round(mean(b[,3]), 3)
+  print(paste0("The average silhouette width with ", 
+               k, 
+               " clusters is ", 
+               mean_sil_width
+               )
+        )
+  sil_width_list <- c(sil_width_list, mean_sil_width)
+  }
+
+# Plot results of silhouette analysis
+plot(nclusters, sil_width_list, 
+     type = "b", 
+     xlab = "Number of Clusters (k)",
+     ylab = "Mean Silhouette Width")
+title("Mean Silhouette Width vs. Number of Clusters in Normalized Iris Data")
+
+# Perform k-means clustering
+iris_cluster <- kmeans(iris_centered, 2)
+
+# Perform PCA on normalized iris data
+iris_PC <- prcomp(data.matrix(iris_centered[,1:4]), 
+                 center = TRUE, 
+                 scale = TRUE)
+
+# Plot k-means clustering, color by cluster
+ggplot(iris_PC,
+       aes(x = PC1, y = PC2,
+           color = as.factor(iris_cluster$cluster))) +
+  geom_point() +
+  labs(title = "K-Means Clustering of Iris Measurement Data",
+       subtitle = "k = 2",
+       color = "Cluster")
+
+
+```
+ 
+**Using the mean silhouette width as our metric, we can see that the optimal number of clusters to choose is 2. Because there are more species than there are clusters, this clustering cannot correctly separate all species present in the dataset, but it does correctly separate out the measurements of the setosa species from versicolor and virginica.**
+ 
+**If we expand the number of clusters to three we still do not correctly separate versicolor and virginica:**
+
+```{r}
+
+# Perform k-means clustering
+iris_cluster <- kmeans(iris_centered, 3)
+
+# Perform PCA on normalized iris data
+iris_PC <- prcomp(data.matrix(iris_centered[,1:4]), 
+                 center = TRUE, 
+                 scale = TRUE)
+
+# Plot k-means clustering, color by cluster
+ggplot(iris_PC,
+       aes(x = PC1, y = PC2,
+           color = as.factor(iris_cluster$cluster))) +
+  geom_point() +
+  labs(title = "K-Means Clustering of Iris Measurement Data",
+       subtitle = "k = 3",
+       color = "Cluster")
+
+```
+
+
+  
+  
+  
+5. Use hierarchical clustering to cluster the Iris data.
+
+  * Try two different linkage types, and two different distance metrics. 
+  * For one linkage type and one distance metric, try two different cut points. 
+  * Using this clustering, color the PCA plot according to the clusters. (6  plots in total)
+  
+
+```{r}
+# reset iris / iris_centered
+# to include species data for cluster comparison
+rm(iris)
+rm(iris_centered)
+data(iris)
+
+iris_centered <- as.data.frame(apply(iris[,1:4],
+                       2, 
+                       function(x) (x - mean(x)) / sd(x)
+                       ))
+
+
+# Clusters labeled with "1" will be computed with euclidean distance
+# Clusters labeled with "2" will be computed with manhattan distance
+# Clusters labeled with "a" will be computed by centroid linkage
+# Clusters labeled with "b" will be computed by single linkage
+
+# Compute one hierarchical clustering with centroid linkage
+tree1a <- hclust(dist(iris_centered, 
+                      method="euclidean"), 
+                   method = "centroid")
+
+tree1b <- hclust(dist(iris_centered, 
+                      method="euclidean"), 
+                   method = "single")
+
+tree2a <- hclust(dist(iris_centered, 
+                      method="manhattan"), 
+                   method = "centroid")
+
+tree2b <- hclust(dist(iris_centered, 
+                      method="manhattan"), 
+                   method = "single")
+
+
+# Cut trees into three clusters
+cluster1a <- cutree(tree1a, 3)
+cluster1b <- cutree(tree1b, 3)
+cluster2a <- cutree(tree2a, 3)
+cluster2b <- cutree(tree2b, 3)
+# Cut tree 1a and 2b into four clusters
+cluster1a_4cut <- cutree(tree1a, 4)
+cluster2b_4cut <- cutree(tree2b, 4)
+
+# Bind cluster assignments to dataframe, add species back in
+iris_centered <- cbind(iris_centered, 
+                       cluster1a, 
+                       cluster1b, 
+                       cluster2a, 
+                       cluster2b, 
+                       cluster1a_4cut,
+                       cluster2b_4cut, 
+                       iris[,5])
+colnames(iris_centered)[ncol(iris_centered)] <- "Species"
+
+# Perform PCA on normalized iris data
+iris_PC <- prcomp(data.matrix(iris_centered[,1:4]), 
+                 center = TRUE, 
+                 scale = TRUE)
+
+# Plot species as a reference
+ggplot(iris_PC, 
+       aes(x = PC1, y = PC2, 
+           color = as.character(iris_centered$Species))) + 
+  geom_point() +
+  labs(title = "Principal Component Analysis of Measurements on 3 Species of Iris",
+       color = "Species")
+
+# Plot clustering 1a
+ggplot(iris_PC, 
+       aes(x = PC1, y = PC2, 
+           color = as.character(iris_centered$cluster1a))) + 
+  geom_point() +
+  labs(title = "Hierarchical Clustering of Iris Measurement Data",
+       subtitle = "Euclidean Distance, Centroid Linkage, k = 3",
+       color = "Cluster")
+
+# Plot clustering 1a with 4 cuts
+ggplot(iris_PC, 
+       aes(x = PC1, y = PC2, 
+           color = as.character(iris_centered$cluster1a_4cut))) + 
+  geom_point() +
+  labs(title = "Hierarchical Clustering of Iris Measurement Data",
+       subtitle = "Euclidean Distance, Centroid Linkage, k = 4",
+       color = "Cluster")
+
+# Plot clustering 1b
+ggplot(iris_PC,
+       aes(x = PC1, y = PC2,
+           color = as.character(iris_centered$cluster1b))) +
+  geom_point() + 
+  labs(title = "Hierarchical Clustering of Iris Measurement Data",
+       subtitle = "Euclidean Distance, Single Linkage, k = 3", 
+       color = "Cluster")
+
+# Plot clustering 2a
+ggplot(iris_PC, 
+       aes(x = PC1, y = PC2, 
+           color = as.character(iris_centered$cluster2a))) +
+  geom_point() +
+    labs(title = "Hierarchical Clustering of Iris Measurement Data",
+       subtitle = "Manhattan Distance, Centroid Linkage, k = 3", 
+       color = "Cluster")
+
+# Plot clustering 2b
+ggplot(iris_PC, 
+       aes(x = PC1, y = PC2, 
+           color = as.character(iris_centered$cluster2b))) +
+  geom_point() +
+    labs(title = "Hierarchical Clustering of Iris Measurement Data",
+       subtitle = "Manhattan Distance, Single Linkage, k = 3", 
+       color = "Cluster")
+
+# Plot clustering 2b with 4 cuts
+ggplot(iris_PC, 
+       aes(x = PC1, y = PC2, 
+           color = as.character(iris_centered$cluster2b_4cut))) +
+  geom_point() +
+    labs(title = "Hierarchical Clustering of Iris Measurement Data",
+       subtitle = "Manhattan Distance, Single Linkage, k = 4", 
+       color = "Cluster")
+
+
+```
+
+
+**One thing I found interesting about the applicatons of these clustering algorithms is that none of the correctly segregated the different species into their own clusters. Most were successful at clustering the all setosa plants save one together. Regardless of what distance measure was used, which linkage type was chosen, or the number of clusters assigned, the majority of versicolor and virginica data points were grouped together, with the "extra" clusters being composed of 1-4 outliers.**
